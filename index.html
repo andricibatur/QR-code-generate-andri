@@ -29,12 +29,13 @@
       border: 1px solid #ccc;
       padding: 4px;
       box-sizing: border-box;
-      height: 130px; /* Cukup untuk QR + teks */
-      width: 100%;    /* Lebar mengikuti kolom grid */
+      height: 130px;
+      width: 100%;
     }
     .qr-box .qr-image {
       width: 80px;
       height: 80px;
+      flex-shrink: 0;
     }
     .qr-text {
       margin-top: 4px;
@@ -50,7 +51,7 @@
       .no-print {
         display: none;
       }
-      /* Saat cetak, sesuaikan agar tetap 7 kolom dan kotak lebih kecil */
+      /* Saat cetak, sesuaikan agar tetap 6 kolom dan kotak lebih kecil */
       #qr-grid {
         grid-template-columns: repeat(6, 1fr);
         gap: 4px;
@@ -59,14 +60,26 @@
         border: none;
         padding: 2px;
         height: 140px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        page-break-inside: avoid;
       }
       .qr-box .qr-image {
         width: 60px;
         height: 60px;
+        flex-shrink: 0;
       }
       .qr-text {
         font-size: 0.6rem;
-        margin-top: 1px;
+        margin-top: 8px;      /* Perbesar margin agar tidak tumpang tindih */
+        min-height: 18px;     /* Tambahan ruang minimum */
+        line-height: 1.1;
+        width: 100%;
+        background: white;    /* Pastikan teks tidak overlap gambar */
+        z-index: 1;
+        position: relative;
       }
     }
     button {
