@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Code Generator - 77 Kotak per Halaman</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 16px;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    #controls {
+      margin-bottom: 16px;
+    }
+    /* Grid untuk 7 kolom, total 7×11 = 77 kotak */
+    #qr-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+    }
+    .qr-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      border: 1px solid #ccc;
+      padding: 4px;
+      box-sizing: border-box;
+      height: 130px; /* Cukup untuk QR + teks */
+      width: 100%;    /* Lebar mengikuti kolom grid */
+    }
+    .qr-box .qr-image {
+      width: 80px;
+      height: 80px;
+    }
+    .qr-text {
+      margin-top: 4px;
+      font-size: 0.75rem;
+      text-align: center;
+      word-wrap: break-word;
+      width: 100%;
+    }
+    .no-print {
+      /* elemen yang tidak dicetak */
+    }
+    @media print {
+      .no-print {
+        display: none;
+      }
+      /* Saat cetak, sesuaikan agar tetap 7 kolom dan kotak lebih kecil */
+      #qr-grid {
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .qr-box {
+        border: none;
+        padding: 2px;
+        height: 100px;
+      }
+      .qr-box .qr-image {
+        width: 60px;
+        height: 60px;
+      }
+      .qr-text {
+        font-size: 0.6rem;
+        margin-top: 2px;
+      }
+    }
+    button {
+      margin-right: 8px;
+      padding: 8px 12px;
+      border: none;
+      background-color: #007ACC;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #aaa;
+      cursor: default;
+    }
+    input[type="file"] {
+      display: none;
+    }
+  </style>
+  <!-- QRCode.js dari CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <h1>QR Code Generator (77 Kotak per Halaman)</h1>
+
+  <div id="controls" class="no-print">
+    <label for="text-input">Teks QR:</label>
+    <input type="text" id="text-input" placeholder="Masukkan teks di sini" style="width: 60%;" />
+    <button id="btn-generate">Generate 77 QR</button>
+    <button id="btn-print" onclick="window.print()">Cetak ke PDF</button>
+    <button id="btn-export">Ekspor JSON</button>
+    <button id="btn-import">Impor JSON</button>
+    <input type="file" id="file-input" accept=".json" />
+  </div>
+
+  <div id="qr-grid"></div>
+
+  <script>
+    // Nama database dan object store
+    const DB_NAME = 'qrGeneratorDB';
+    const STORE_NAME = 'inputs';
+    const DB_VERSION = 1;
+    let db;
+
+    // Inisialisasi IndexedDB
+    function initIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+          db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+            store.createIndex('text', 'text', { unique: false });
+          }
+        };
+
+        request.onsuccess = (event) => {
+          db = event.target.result;
+          resolve();
+        };
+        request.onerror = (event) => {
+          reject('Gagal membuka IndexedDB: ' + event.target.errorCode);
+        };
+      });
+    }
+
+    // Simpan input (id selalu 1 untuk overwrite)
+    function saveInputToDB(text) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const data = { id: 1, text, timestamp: new Date().toISOString() };
+        const request = store.put(data);
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    // Ambil input terakhir
+    function getInputFromDB() {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(1);
+        request.onsuccess = (event) => {
+          const result = event.target.result;
+          resolve(result ? result.text : '');
+        };
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    // Ekspor input ke JSON
+    function exportToJSON() {
+      getInputFromDB().then((text) => {
+        const data = { text, exportedAt: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'qr_input_export.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    // Impor JSON
+    function importFromJSON(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const obj = JSON.parse(e.target.result);
+          if (obj.text !== undefined) {
+            document.getElementById('text-input').value = obj.text;
+            saveInputToDB(obj.text);
+          } else {
+            alert('Format JSON tidak valid.');
+          }
+        } catch (err) {
+          alert('Gagal membaca JSON: ' + err);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Buat 77 QR code, setiap kotak pakai ukuran tetap 80×80 px
+    function generateQRCodes(text) {
+      const container = document.getElementById('qr-grid');
+      container.innerHTML = ''; // Kosongkan dulu
+      for (let i = 0; i < 77; i++) {
+        const box = document.createElement('div');
+        box.classList.add('qr-box');
+
+        // Div untuk QR
+        const qrDiv = document.createElement('div');
+        qrDiv.classList.add('qr-image');
+        box.appendChild(qrDiv);
+
+        // Buat QR code dengan lebar dan tinggi 80
+        new QRCode(qrDiv, {
+          text: text,
+          width: 80,
+          height: 80,
+          correctLevel: QRCode.CorrectLevel.H
+        });
+
+        // Teks di bawah QR
+        const textDiv = document.createElement('div');
+        textDiv.classList.add('qr-text');
+        textDiv.innerText = text;
+        box.appendChild(textDiv);
+
+        container.appendChild(box);
+      }
+    }
+
+    // Inisialisasi saat DOM siap
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initIndexedDB();
+      // Ambil teks terakhir dan masukkan ke input
+      const lastText = await getInputFromDB();
+      if (lastText) {
+        document.getElementById('text-input').value = lastText;
+      }
+
+      // Tombol Generate 77 QR
+      document.getElementById('btn-generate').addEventListener('click', async () => {
+        const text = document.getElementById('text-input').value.trim();
+        if (!text) {
+          alert('Masukkan teks terlebih dahulu.');
+          return;
+        }
+        await saveInputToDB(text);
+        generateQRCodes(text);
+      });
+
+      // Tombol Ekspor
+      document.getElementById('btn-export').addEventListener('click', () => {
+        exportToJSON();
+      });
+
+      // Tombol Impor
+      document.getElementById('btn-import').addEventListener('click', () => {
+        document.getElementById('file-input').click();
+      });
+      document.getElementById('file-input').addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          importFromJSON(file);
+        }
+        event.target.value = '';
+      });
+    });
+  </script>
+</body>
+</html>
